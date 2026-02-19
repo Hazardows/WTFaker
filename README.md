@@ -1,2 +1,2 @@
 # WTFaker
-A simple checker for competitive programing (CP).
+A simple checker for competitive programing (CP)
