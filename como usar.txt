@@ -1,0 +1,3 @@
+Arrastra el programa a WTFaker.exe y listo
+Las configuraciones pueden ser ajustadas desde el archivo WTFaker.cfg
+En caso de que WTFaker.cfg no exista, será generado por el programa
