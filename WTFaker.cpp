@@ -607,6 +607,8 @@ struct config {
     bool use_stdio;
     u32 first_case;
     string base_name;
+    string cpp_compiler;
+    string cpp_standard;
 };
 
 static string format_filename(string base_name, u32 num, file_in_out_format fformat, case_enum_format cformat, bool is_in) {
@@ -676,6 +678,8 @@ void load_config(string filename, config& c) {
     c.ce_format = F_X_AUTO;
     c.first_case = 1;
     c.use_stdio = false;
+    c.cpp_compiler = "g++";
+    c.cpp_standard = "-std=c++11";
 
     ifstream file(get_program_directory() + "/" + filename);
     if (!file.is_open()) {
@@ -689,15 +693,31 @@ void load_config(string filename, config& c) {
         log_output(WHITE, "   enum_format = auto");
         log_output(WHITE, "   first_case = 1");
         log_output(WHITE, "   use_stdio = false");
+        log_output(WHITE, "   cpp_compiler = g++");
+        log_output(WHITE, "   cpp_standard = 11");
         log_output(WHITE, "");
 
         ofstream file(get_program_directory() + "/" + filename);
-        file << "# Archivo de configuracion para WTFaker\n\n";
-        file << "# Limite de tiempo\n";
+        file << "# Archivo de configuración para WTFaker\n\n";
+        file << "# WTFaker también puede compilar y correr tu programa en caso\n";
+        file << "# de que arrastres un archivo.cpp\n\n";
+        file << "# El compilador que será utilizado para código .cpp\n";
+        file << "# Esta opción puede especificar un path al copmilador\n";
+        file << "# en el formato \"path_to/compiler.exe\" o \"path_to\\compiler.exe\"\n";
+        file << "# En caso de que el compilador esté en el path\n";
+        file << "# se puede especificar tal cuál\n";
+        file << "# default = \"g++\"\n";
+        file << "# compiladores compatibles: \"clang++\", \"g++\"\n";
+        file << "cpp_compiler = \"g++\"\n\n";
+        file << "# El estándar de C++ que será utilizado para la\n";
+        file << "# compilación del código C++\n";
+        file << "# default = 11\n";
+        file << "cpp_standard = 11\n\n";
+        file << "# Límite de tiempo\n";
         file << "# default = 1000\n";
         file << "# infinite -> 0\n";
         file << "time_limit = 1000\n\n";
-        file << "# Limite de memoria\n";
+        file << "# Límite de memoria\n";
         file << "# default = 64000000\n";
         file << "# infinite -> 0\n";
         file << "mem_limit = 64000000\n\n";
@@ -708,7 +728,7 @@ void load_config(string filename, config& c) {
         file << "# auto -> el programa revisará el formato de forma automatica\n";
         file << "# default = auto\n";
         file << "io_format = auto\n\n";
-        file << "# formato de enumeracion\n";
+        file << "# formato de enumeración\n";
         file << "# 1 -> 1, 2, 3, ...\n";
         file << "# 2 -> 01, 02, 03, ...\n";
         file << "# auto -> el programa revisará el formato de forma automatica\n";
@@ -717,7 +737,7 @@ void load_config(string filename, config& c) {
         file << "# primer caso de prueba\n";
         file << "# default = 1\n";
         file << "first_case = 1\n\n";
-        file << "# define si el programa utilizara la salida estandar\n";
+        file << "# define si el programa utilizará la salida estandar\n";
         file << "# true -> el programa espera entradas de consola\n";
         file << "# false -> el programa espera trabajar con archivos\n";
         file << "use_stdio = false\n";
@@ -829,6 +849,78 @@ void load_config(string filename, config& c) {
             c.use_stdio = (value == "true" || value == "TRUE" || value == "1");
             goto skip;
         }
+        else if (key == "cpp_compiler") {
+            string equals;
+            if (!(line_stream >> equals) || equals != "=") {
+                goto error;
+            }
+            string cpp;
+            getline(line_stream, cpp);
+            bool only_spaces = true;
+            for (char& i : cpp) {
+                if (i != ' ') {
+                    only_spaces = false;
+                    break;
+                }
+            }
+            if (only_spaces) {
+                goto error;
+            }
+            int fp = -1;
+            for (int i = 0; i < cpp.size(); i++) {
+                if (cpp[i] == '\"') {
+                    if (fp == -1) {
+                        fp = i;
+                    }
+                    else {
+                        cpp = cpp.substr(fp, i - fp + 1);
+                        break;
+                    }
+                }
+            }
+
+            only_spaces = true;
+            for (int i = 1; i < cpp.size() - 1; i++) {
+                if (i != ' ') {
+                    only_spaces = false;
+                    break;
+                }
+            }
+            if (only_spaces) {
+                goto error;
+            }
+            c.cpp_compiler = cpp;
+
+            // log_output(WHITE, "\n\n" + cpp + "\n\n");
+            goto skip;
+        }
+        else if (key == "cpp_standard") {
+            string equals;
+            if (!(line_stream >> equals) || equals != "=") {
+                goto error;
+            }
+            string std;
+            if (!(line_stream >> std)) {
+                goto error;
+            }
+            string supported_std_version[] = {
+                "98", "03", "11", "14", "17", "20", "23"
+            };
+            bool supported = false;
+            for (string& i : supported_std_version) {
+                if (i == std) {
+                    supported = true;
+                    break;
+                }
+            }
+
+            if (!supported) {
+                goto error;
+            }
+            c.cpp_standard = "-std=c++" + std;
+            // log_output(WHITE, "\n\n" + ver + "\n\n");
+            goto skip;
+        }
 
         log_output(RED, "Clave desconocida en la linea: " + util::to_string(line));
         goto skip;
@@ -871,8 +963,26 @@ int main(int argc, char* argv[]) {
     if (path_s.size() > 3) {
         extension = path_s.substr(path_s.size() - 4);
     }
+    if (extension == ".cpp" || extension == ".CPP") {
+        log_output(CYAN, "Se ha detectado un archivo de codigo C++");
+        log_output(CYAN, "Compilando el programa \"" + checker_conf.base_name + ".cpp\"...");
+
+        string command = checker_conf.cpp_compiler + " " + checker_conf.cpp_standard + " ";
+        command += checker_conf.base_name + ".cpp -static -o " + checker_conf.base_name + ".exe";
+        int error_code = system(command.c_str());
+
+        if (error_code != 0) {
+            log_output(RED, "Se produjeron errores de compilacion, el programa no puede ser ejecutado");
+            log_output(WHITE, "Pulsa cualquier tecla para cerrar...");
+            getch();
+            return -2;
+        }
+
+        log_output(CYAN, "El programa ha sido compilado correctamente\n");
+        extension = ".exe";
+    }
     if (extension == "" || (extension != ".exe" && extension != ".EXE")) {
-        log_output(RED, "Se debe arrastrar un .exe a este programa");
+        log_output(RED, "Se debe arrastrar un .exe o .cpp a este programa");
         log_output(WHITE, "Pulsa cualquier tecla para cerrar...");
         getch();
         return -1;
